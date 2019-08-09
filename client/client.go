@@ -1,13 +1,11 @@
 package client
 
 import (
-	"crypto/ecdsa"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ybbus/jsonrpc"
 	"math/big"
@@ -156,23 +154,6 @@ func (c *Client) GetBalance(qkcAddr *QkcAddress) (balance *big.Int, err error) {
 	return new(big.Int).SetUint64(0), nil
 }
 
-func (c *Client) NewAddress(fullShardKey uint32) (*ecdsa.PrivateKey, *QkcAddress, error) {
-	privateKey, err := crypto.GenerateKey()
-	if err != nil {
-		return nil, nil, err
-	}
-
-	publicKey := privateKey.Public()
-	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
-	if !ok {
-		fmt.Println("no ok")
-		return nil, nil, fmt.Errorf("")
-	}
-
-	address := QkcAddress{crypto.PubkeyToAddress(*publicKeyECDSA), fullShardKey}
-	return privateKey, &address, nil
-}
-
 func (c *Client) GetCode(tokenAddr *QkcAddress, number *big.Int) (string, error) {
 	resp, err := c.client.Call("getCode", tokenAddr.ToHex(), toBlockNumArg(number))
 	if err != nil {
@@ -220,13 +201,6 @@ func (c *Client) GasPrice(fullShardId uint32, tokenId uint64) (*big.Int, error) 
 	return price, nil
 }
 
-func (c *Client) GetFullShardIdByFullShardKey(fullShardKey uint32) uint32 {
-	chainID := fullShardKey >> 16
-	shardsize := uint32(1)
-	shardID := fullShardKey & (shardsize - 1)
-	return (chainID << 16) | shardsize | shardID
-}
-
 func (c *Client) GetAccountData(qkcaddr *QkcAddress, number *big.Int, includeShards bool) (map[string]interface{}, error) {
 	resp, err := c.client.Call("getAccountData", qkcaddr.ToHex(), toBlockNumArg(number), includeShards)
 	if err != nil {
@@ -235,7 +209,7 @@ func (c *Client) GetAccountData(qkcaddr *QkcAddress, number *big.Int, includeSha
 	if resp.Error != nil {
 		return nil, resp.Error
 	}
-	fullShardId := c.GetFullShardIdByFullShardKey(qkcaddr.FullShardKey)
+	fullShardId := GetFullShardIdByFullShardKey(qkcaddr.FullShardKey)
 	shards := resp.Result.(map[string]interface{})["shards"]
 	for _, val := range shards.([]interface{}) {
 		shrd := val.(map[string]interface{})
@@ -301,7 +275,7 @@ func (c *Client) CreateTransaction(qkcFromAddr, qkcToAddr *QkcAddress, amount *b
 	if err != nil {
 		return nil, err
 	}
-	tx = NewEvmTransaction(nonce, qkcToAddr.Recipient, amount, gasLimit, gasPrice, qkcFromAddr.FullShardKey, qkcToAddr.FullShardKey, TokenIDEncode("QKC"),
+	tx = NewEvmTransaction(nonce, &qkcToAddr.Recipient, amount, gasLimit, gasPrice, qkcFromAddr.FullShardKey, qkcToAddr.FullShardKey, TokenIDEncode("QKC"),
 		TokenIDEncode("QKC"), networkId, 0, nil)
 	return tx, nil
 }

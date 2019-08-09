@@ -98,8 +98,8 @@ func (e *EvmTransaction) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&e.data)
 }
 
-func NewEvmTransaction(nonce uint64, to common.Address, amount *big.Int, gasLimit uint64, gasPrice *big.Int, fromFullShardKey uint32, toFullShardKey uint32, gasTokenID uint64, transferTokenID uint64, networkId uint32, version uint32, data []byte) *EvmTransaction {
-	return newEvmTransaction(nonce, &to, amount, gasLimit, gasPrice, fromFullShardKey, toFullShardKey, gasTokenID, transferTokenID, networkId, version, data)
+func NewEvmTransaction(nonce uint64, to *common.Address, amount *big.Int, gasLimit uint64, gasPrice *big.Int, fromFullShardKey uint32, toFullShardKey uint32, gasTokenID uint64, transferTokenID uint64, networkId uint32, version uint32, data []byte) *EvmTransaction {
+	return newEvmTransaction(nonce, to, amount, gasLimit, gasPrice, fromFullShardKey, toFullShardKey, gasTokenID, transferTokenID, networkId, version, data)
 }
 
 func (e *EvmTransaction) SetGas(data uint64) {
@@ -117,10 +117,6 @@ func (e *EvmTransaction) SetVRS(v, r, s *big.Int) {
 	e.data.R = r
 	e.data.S = s
 	e.updated = true
-}
-
-func NewEvmContractCreation(nonce uint64, amount *big.Int, gasLimit uint64, gasPrice *big.Int, fromFullShardKey uint32, toFullShardKey uint32, gasTokenID uint64, transferTokenID uint64, networkId uint32, version uint32, data []byte) *EvmTransaction {
-	return newEvmTransaction(nonce, nil, amount, gasLimit, gasPrice, fromFullShardKey, toFullShardKey, gasTokenID, transferTokenID, networkId, version, data)
 }
 
 func newEvmTransaction(nonce uint64, to *common.Address, amount *big.Int, gasLimit uint64, gasPrice *big.Int, fromFullShardKey uint32, toFullShardKey uint32, gasTokenID uint64, transferTokenID uint64, networkId uint32, version uint32, data []byte) *EvmTransaction {

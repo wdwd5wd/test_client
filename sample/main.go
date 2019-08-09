@@ -20,13 +20,13 @@ func main() {
 	context := make(map[string]string)
 	context["address"] = address.Hex()
 	getBalance(context)
-	_, qkcToAddr, err := client.NewAddress(0)
+	_, qkcToAddr, err := clt.NewAddress(0)
 	if err != nil {
 		fmt.Println("NewAddress error: ", err.Error())
 	}
 
 	height := getHeight(nil)
-	context["height"] = "0x" + common.Bytes2Hex(new(big.Int).SetUint64(height-25).Bytes())
+	context["height"] = "0x" + common.Bytes2Hex(new(big.Int).SetUint64(height - 25).Bytes())
 	block := getBlock(context)
 
 	txs := block["transactions"]
@@ -136,7 +136,7 @@ func sent(ctx map[string]string) string {
 	gasPrice, _ := new(big.Int).SetString(ctx["price"], 10)
 	privateKey := ctx["privateKey"]
 	prvkey, _ := crypto.ToECDSA(common.FromHex(privateKey))
-	tx, err := client.CreateTransaction(&clt.QkcAddress{from, 0}, &clt.QkcAddress{to, 0}, amount, uint64(30000), gasPrice)
+	tx, err := client.CreateTransaction(&clt.QkcAddress{Recipient: from}, &clt.QkcAddress{Recipient: to}, amount, uint64(30000), gasPrice)
 	if err != nil {
 		fmt.Println(err.Error())
 	}

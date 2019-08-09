@@ -61,6 +61,13 @@ func TokenCharEncode(char byte) uint64 {
 	panic(fmt.Errorf("unknown character %v", byte(char)))
 }
 
+func GetFullShardIdByFullShardKey(fullShardKey uint32) uint32 {
+	chainID := fullShardKey >> 16
+	shardsize := uint32(1)
+	shardID := fullShardKey & (shardsize - 1)
+	return (chainID << 16) | shardsize | shardID
+}
+
 func GetFullShardId(chainId, shardSize, shardId uint32) uint32 {
 	return chainId<<16 | shardSize | shardId
 }
@@ -79,4 +86,21 @@ func GetAccount(fullShardKey uint32) (*ecdsa.PrivateKey, *QkcAddress, error) {
 	address := crypto.PubkeyToAddress(*publicKeyECDSA)
 	qkcAddr := QkcAddress{Recipient: address, FullShardKey: fullShardKey}
 	return privateKey, &qkcAddr, nil
+}
+
+func NewAddress(fullShardKey uint32) (*ecdsa.PrivateKey, *QkcAddress, error) {
+	privateKey, err := crypto.GenerateKey()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	publicKey := privateKey.Public()
+	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+	if !ok {
+		fmt.Println("no ok")
+		return nil, nil, fmt.Errorf("")
+	}
+
+	address := QkcAddress{crypto.PubkeyToAddress(*publicKeyECDSA), fullShardKey}
+	return privateKey, &address, nil
 }
