@@ -9,8 +9,8 @@ import (
 )
 
 var (
-	client      = clt.NewClient("http://jrpc.devnet.quarkchain.io:38391")
-	fullShardId = uint32(0)
+	client       = clt.NewClient("http://jrpc.devnet.quarkchain.io:38391")
+	fullShardKey = uint32(0)
 )
 
 func main() {
@@ -41,6 +41,8 @@ func main() {
 	context["to"] = qkcToAddr.Recipient.Hex()
 	context["amount"] = "0"
 	context["price"] = "100000000000"
+	context["fromFullShardKey"] = "0x0005cE6f"
+	context["toFullShardKey"] = "0x0005cE6f"
 	context["privateKey"] = common.Bytes2Hex(prvkey.D.Bytes())
 
 	txid := sent(context)
@@ -136,7 +138,15 @@ func sent(ctx map[string]string) string {
 	gasPrice, _ := new(big.Int).SetString(ctx["price"], 10)
 	privateKey := ctx["privateKey"]
 	prvkey, _ := crypto.ToECDSA(common.FromHex(privateKey))
-	tx, err := client.CreateTransaction(&clt.QkcAddress{Recipient: from}, &clt.QkcAddress{Recipient: to}, amount, uint64(30000), gasPrice)
+	fromFullShardKey := fullShardKey
+	if _, ok := ctx["fromFullShardKey"]; ok {
+		fromFullShardKey = uint32(new(big.Int).SetBytes(common.FromHex(ctx["fromFullShardKey"])).Uint64())
+	}
+	toFullShardKey := fullShardKey
+	if _, ok := ctx["toFullShardKey"]; ok {
+		toFullShardKey = uint32(new(big.Int).SetBytes(common.FromHex(ctx["toFullShardKey"])).Uint64())
+	}
+	tx, err := client.CreateTransaction(&clt.QkcAddress{Recipient: from, FullShardKey: fromFullShardKey}, &clt.QkcAddress{Recipient: to, FullShardKey:toFullShardKey}, amount, uint64(30000), gasPrice)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
