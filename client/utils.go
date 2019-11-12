@@ -72,22 +72,6 @@ func GetFullShardId(chainId, shardSize, shardId uint32) uint32 {
 	return chainId<<16 | shardSize | shardId
 }
 
-func GetAccount(fullShardKey uint32) (*ecdsa.PrivateKey, *QkcAddress, error) {
-	privateKey, err := crypto.GenerateKey()
-	if err != nil {
-		return nil, nil, err
-	}
-
-	publicKey := privateKey.Public()
-	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
-	if !ok {
-		return nil, nil, errors.New("error casting public key to ECDSA")
-	}
-	address := crypto.PubkeyToAddress(*publicKeyECDSA)
-	qkcAddr := QkcAddress{Recipient: address, FullShardKey: fullShardKey}
-	return privateKey, &qkcAddr, nil
-}
-
 func NewAddress(fullShardKey uint32) (*ecdsa.PrivateKey, *QkcAddress, error) {
 	privateKey, err := crypto.GenerateKey()
 	if err != nil {
