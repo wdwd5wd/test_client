@@ -32,6 +32,10 @@ func (Self QkcAddress) ToBytes() []byte {
 	return address
 }
 
+func (Self QkcAddress) FullShardKeyToHex() string {
+	return hexutil.Encode(Uint32ToBytes(Self.FullShardKey))
+}
+
 // Uint32ToBytes trans uint32 num to bytes
 func Uint32ToBytes(n uint32) []byte {
 	Bytes := make([]byte, 4)

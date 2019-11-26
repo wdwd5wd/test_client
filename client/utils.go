@@ -38,7 +38,6 @@ func TokenIDEncode(str string) uint64 {
 	if len(str) >= 13 {
 		panic(errors.New("name too long"))
 	}
-	// TODO check name can only contain 0-9, A-Z
 
 	id := TokenCharEncode(str[len(str)-1])
 	base := TOKENBASE

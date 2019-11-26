@@ -202,7 +202,7 @@ func (c *Client) GasPrice(fullShardId uint32, tokenId uint64) (*big.Int, error) 
 }
 
 func (c *Client) GetAccountData(qkcaddr *QkcAddress, number *big.Int, includeShards bool) (map[string]interface{}, error) {
-	resp, err := c.client.Call("getAccountData", qkcaddr.ToHex(), toBlockNumArg(number), includeShards)
+	resp, err := c.client.Call("getAccountData", qkcaddr.ToHex(), nil, includeShards)
 	if err != nil {
 		return nil, err
 	}
