@@ -292,3 +292,20 @@ func (c *Client) CreateTransaction(qkcFromAddr, qkcToAddr *QkcAddress, amount *b
 		TokenIDEncode("QKC"), networkId, 0, nil)
 	return tx, nil
 }
+
+func (c *Client) GetFullShardIds() ([]uint32, error) {
+	resp, err := c.client.Call("getFullShardIds")
+	if err != nil {
+		return []uint32{}, err
+	}
+	data := resp.Result.([]interface{})
+	res := make([]uint32, 0, len(data))
+	for _, id := range data {
+		fullShardId, err := hexutil.DecodeUint64(id.(string))
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, uint32(fullShardId))
+	}
+	return res, nil
+}
