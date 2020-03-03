@@ -3,58 +3,59 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
+	"math/big"
+
 	clt "github.com/QuarkChain/goqkcclient/client"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
-	"math/big"
 
-	"io/ioutil"
-	"encoding/json"
 	"encoding/csv"
+	"encoding/json"
+	"io/ioutil"
 	"log"
 	"strings"
-	
-	"time"
-	"runtime"
-	"sync"
-	"strconv"
 
+	"runtime"
+	"strconv"
+	"sync"
+	"time"
 )
 
 var (
 	client       = clt.NewClient("http://13.56.95.27:38391")
 	fullShardKey = uint32(0)
 
-	txCount = 40000
-	CPUCount = 4
-	MaxThreadCount = 4
-
+	txCount        = 1
+	CPUCount       = 4
+	MaxThreadCount = 1
 )
 
 type Account struct {
-    Address  string `json:"address"`
-    Key string `json:"key"`
+	Address string `json:"address"`
+	Key     string `json:"key"`
 }
 
 type Parameter struct {
-    Para []Account
+	Para []Account
 }
 
 //定义一个json空结构,为了实现一个方法
 type JsonStruct struct {
 }
+
 //实现一个加载方法
 func (js JsonStruct) Load(filename string, v interface{}) {
-    data, err := ioutil.ReadFile(filename)
-    if err != nil {
-        return
-    }
-    json.Unmarshal([]byte(data), v)
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return
+	}
+	json.Unmarshal([]byte(data), v)
 }
+
 //使用函数灵活调用方法
 func NewJson() *JsonStruct {
-    return &JsonStruct{}
+	return &JsonStruct{}
 }
 
 // 设置并发channel
@@ -92,45 +93,46 @@ var timeUnix = make([]int64, txCount)
 var timeStampResult = make([]interface{}, txCount)
 var timeStampInt = make([]int64, txCount)
 
-
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // // 用于在多shard上测试load unbalance
 
 // 并行发送交易函数
 func sendinBatch(sendingTx Account, wg *sync.WaitGroup, RandNum string, i int) {
-	
+
 	time.Sleep(15 * time.Millisecond)
 	// fmt.Println(sendingNum)
 
 	address, _ := hexutil.Decode(sendingTx.Address)
 	prvkey, err := crypto.ToECDSA(common.FromHex(sendingTx.Key))
-	
+
 	if err == nil {
 		context := make(map[string]string)
 		// addr := account.NewAddress(common.BytesToAddress(address[:20]), binary.BigEndian.Uint32(address[20:]))
 		addr := clt.QkcAddress{Recipient: common.BytesToAddress(address[:20]), FullShardKey: binary.BigEndian.Uint32(address[20:])}
 		context["address"] = addr.Recipient.Hex()
 
-		// 假设有4个shard，不同的随机数代表account在不同的shard上发送交易
-		if RandNum == "1" {
-			context["fromFullShardKey"] = "0x00000001"
-			context["toFullShardKey"] = "0x00000001"
-		}
-		if RandNum == "2" {
-			context["fromFullShardKey"] = "0x00010001"
-			context["toFullShardKey"] = "0x00000001"
-		}
-		if RandNum == "3" {
-			context["fromFullShardKey"] = "0x00020001"
-			context["toFullShardKey"] = "0x00000001"
-		}
-		if RandNum == "4" {
-			context["fromFullShardKey"] = "0x00030001"
-			context["toFullShardKey"] = "0x00000001"
-		}
+		// // 假设有4个shard，不同的随机数代表account在不同的shard上发送交易
+		// if RandNum == "1" {
+		// 	context["fromFullShardKey"] = "0x00000001"
+		// 	context["toFullShardKey"] = "0x00000001"
+		// }
+		// if RandNum == "2" {
+		// 	context["fromFullShardKey"] = "0x00010001"
+		// 	context["toFullShardKey"] = "0x00000001"
+		// }
+		// if RandNum == "3" {
+		// 	context["fromFullShardKey"] = "0x00020001"
+		// 	context["toFullShardKey"] = "0x00000001"
+		// }
+		// if RandNum == "4" {
+		// 	context["fromFullShardKey"] = "0x00030001"
+		// 	context["toFullShardKey"] = "0x00000001"
+		// }
 
+		// 假设只有一个shard
+		context["fromFullShardKey"] = "0x00000001"
+		context["toFullShardKey"] = "0x00000001"
 
 		// context["fromFullShardKey"] = addr.FullShardKeyToHex()
 
@@ -139,20 +141,20 @@ func sendinBatch(sendingTx Account, wg *sync.WaitGroup, RandNum string, i int) {
 		// if err != nil {
 		// 	fmt.Println("NewAddress error: ", err.Error())
 		// }
-	
+
 		context["from"] = addr.Recipient.Hex()
 		context["to"] = addr.Recipient.Hex()
 		context["amount"] = "0"
 		context["price"] = "100000000000"
 		// context["toFullShardKey"] = addr.FullShardKeyToHex()
 		context["privateKey"] = common.Bytes2Hex(prvkey.D.Bytes())
-	
+
 		timeUnix[i] = time.Now().Unix()
 		txid := sent(context)
 		// context["txid"] = txid
 		// getTransaction(context)
 		// getReceipt(context)
-		
+
 		// sent(context)
 
 		TransactionID[i] = txid
@@ -166,24 +168,22 @@ func sendinBatch(sendingTx Account, wg *sync.WaitGroup, RandNum string, i int) {
 	wg.Done()
 }
 
-
-
 func main() {
 
 	// 读取及解析json文件
-	json := make([]Account,0)
-    NewJson().Load("./loadtest.json", &json)
-    // fmt.Println(json[0].Address)
+	json := make([]Account, 0)
+	NewJson().Load("./loadtest.json", &json)
+	// fmt.Println(json[0].Address)
 
 	fmt.Println("End reading json")
 
 	// 读取用于生成随机数的csv文件
 	dat, err := ioutil.ReadFile("testRandNumGen.csv")
-    if err != nil {
-        log.Fatal(err)
-    }
+	if err != nil {
+		log.Fatal(err)
+	}
 	r := csv.NewReader(strings.NewReader(string(dat[:])))
-    
+
 	record, err := r.ReadAll()
 	// if err == io.EOF {
 	//     break
@@ -192,7 +192,6 @@ func main() {
 		log.Fatal(err)
 	}
 	// fmt.Println(record[0][0])
-    
 
 	// 参数设置
 
@@ -209,10 +208,10 @@ func main() {
 		// 设置需要多少个线程阻塞
 		wg.Add(MaxThreadCount)
 
-		for i := iter*MaxThreadCount; i < (iter+1)*MaxThreadCount; i++{
+		for i := iter * MaxThreadCount; i < (iter+1)*MaxThreadCount; i++ {
 
 			fmt.Println(i)
-			
+
 			// 生成的随机数，列代表生成随机数的类型，0是均匀分布，1是zipf分布
 			var RandNum = record[i][0]
 
@@ -220,7 +219,7 @@ func main() {
 			go sendinBatch(json[i], &wg, RandNum, i)
 
 			// time.Sleep(10 * time.Millisecond)
-		
+
 		}
 
 		// for i := 0; i < txCount; i++ {
@@ -261,12 +260,10 @@ func main() {
 			// fmt.Println(i)
 		}
 	}
-	diff = diff/int64(count)
+	diff = diff / int64(count)
 	fmt.Println(diff)
 
 }
-
-
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -288,7 +285,7 @@ func main() {
 
 // 	address, _ := hexutil.Decode(sendingTx.Address)
 // 	prvkey, err := crypto.ToECDSA(common.FromHex(sendingTx.Key))
-	
+
 // 	if err == nil {
 // 		context := make(map[string]string)
 // 		// addr := account.NewAddress(common.BytesToAddress(address[:20]), binary.BigEndian.Uint32(address[20:]))
@@ -301,14 +298,14 @@ func main() {
 // 		// if err != nil {
 // 		// 	fmt.Println("NewAddress error: ", err.Error())
 // 		// }
-	
+
 // 		context["from"] = addr.Recipient.Hex()
 // 		context["to"] = addr.Recipient.Hex()
 // 		context["amount"] = "0"
 // 		context["price"] = "100000000000"
 // 		context["toFullShardKey"] = addr.FullShardKeyToHex()
 // 		context["privateKey"] = common.Bytes2Hex(prvkey.D.Bytes())
-	
+
 // 		timeUnix[i] = time.Now().Unix()
 // 		txid := sent(context)
 // 		// context["txid"] = txid
@@ -328,8 +325,6 @@ func main() {
 // 	wg.Done()
 // }
 
-
-
 // func main() {
 
 // 	// 读取及解析json文件
@@ -340,7 +335,7 @@ func main() {
 // 	fmt.Println("End reading json")
 
 // 	// 参数设置
-	
+
 // 	runtime.GOMAXPROCS(CPUCount)
 
 // 	// var accountBatch = 5000
@@ -362,7 +357,7 @@ func main() {
 // 			go sendinBatch(json[i], &wg, i)
 
 // 			// time.Sleep(1 * time.Second)
-		
+
 // 		}
 
 // 		// for i := 0; i < txCount; i++ {
@@ -404,11 +399,6 @@ func main() {
 // 	fmt.Println(diff)
 
 // }
-
-
-
-
-
 
 //获取余额
 func getBalance(addr *clt.QkcAddress) {
@@ -523,7 +513,7 @@ func sent(ctx map[string]string) string {
 	// 我改了
 	// 得到to shard 里交易的最终打包时间，以便于之后计算打包延迟
 	var txidhex = common.Bytes2Hex(txid)
-	var txidtoshard = txidhex[0:len(txidhex)-8]
+	var txidtoshard = txidhex[0 : len(txidhex)-8]
 	txidtoshard += ctx["toFullShardKey"][2:len(ctx["toFullShardKey"])]
 	// fmt.Println(txidtoshard)
 	// return common.Bytes2Hex(txid)
