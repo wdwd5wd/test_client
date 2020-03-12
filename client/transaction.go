@@ -8,13 +8,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"math/big"
+	"sync/atomic"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/sha3"
 	"github.com/ethereum/go-ethereum/rlp"
-	"io"
-	"math/big"
-	"sync/atomic"
 )
 
 const (
@@ -169,32 +170,32 @@ func (tx *EvmTransaction) DecodeRLP(s *rlp.Stream) error {
 }
 
 type txdataUnsigned struct {
-	AccountNonce     uint64          `json:"nonce"              gencodec:"required"`
-	Price            *big.Int        `json:"gasPrice"           gencodec:"required"`
-	GasLimit         uint64          `json:"gas"                gencodec:"required"`
-	Recipient        *common.Address `json:"to"                 rlp:"nil"` // nil means contract creation
-	Amount           *big.Int        `json:"value"              gencodec:"required"`
-	Payload          []byte          `json:"input"              gencodec:"required"`
-	NetworkId        uint32          `json:"networkid"          gencodec:"required"`
-	FromFullShardKey *Uint32         `json:"fromfullshardid"    gencodec:"required"`
-	ToFullShardKey   *Uint32         `json:"tofullshardid"      gencodec:"required"`
-	GasTokenID       uint64          `json:"gasTokenID"      gencodec:"required"`
-	TransferTokenID  uint64          `json:"transferTokenID"      gencodec:"required"`
+	AccountNonce uint64          `json:"nonce"              gencodec:"required"`
+	Price        *big.Int        `json:"gasPrice"           gencodec:"required"`
+	GasLimit     uint64          `json:"gas"                gencodec:"required"`
+	Recipient    *common.Address `json:"to"                 rlp:"nil"` // nil means contract creation
+	Amount       *big.Int        `json:"value"              gencodec:"required"`
+	Payload      []byte          `json:"input"              gencodec:"required"`
+	NetworkId    uint32          `json:"networkid"          gencodec:"required"`
+	// FromFullShardKey *Uint32         `json:"fromfullshardid"    gencodec:"required"`
+	// ToFullShardKey   *Uint32         `json:"tofullshardid"      gencodec:"required"`
+	GasTokenID      uint64 `json:"gasTokenID"      gencodec:"required"`
+	TransferTokenID uint64 `json:"transferTokenID"      gencodec:"required"`
 }
 
 func (tx *EvmTransaction) getUnsignedHash() common.Hash {
 	unsigntx := txdataUnsigned{
-		AccountNonce:     tx.data.AccountNonce,
-		Price:            tx.data.Price,
-		GasLimit:         tx.data.GasLimit,
-		Recipient:        tx.data.Recipient,
-		Amount:           tx.data.Amount,
-		Payload:          tx.data.Payload,
-		NetworkId:        tx.data.NetworkId,
-		FromFullShardKey: tx.data.FromFullShardKey,
-		ToFullShardKey:   tx.data.ToFullShardKey,
-		GasTokenID:       tx.data.GasTokenID,
-		TransferTokenID:  tx.data.TransferTokenID,
+		AccountNonce: tx.data.AccountNonce,
+		Price:        tx.data.Price,
+		GasLimit:     tx.data.GasLimit,
+		Recipient:    tx.data.Recipient,
+		Amount:       tx.data.Amount,
+		Payload:      tx.data.Payload,
+		NetworkId:    tx.data.NetworkId,
+		// FromFullShardKey: tx.data.FromFullShardKey,
+		// ToFullShardKey:   tx.data.ToFullShardKey,
+		GasTokenID:      tx.data.GasTokenID,
+		TransferTokenID: tx.data.TransferTokenID,
 	}
 
 	return rlpHash(unsigntx)
