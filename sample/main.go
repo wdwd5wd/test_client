@@ -29,6 +29,12 @@ var (
 	txCount        = 1
 	CPUCount       = 4
 	MaxThreadCount = 1
+
+	// 负责给账户搬移签名的账户
+	ShardTx = Account{
+		Address: "0x5dd8509d4f619f126273092308ce36335854ead2",
+		Key:     "cc9f0a764f6d42b198c0f316670013b8081b25687364cd327955f08a59cee071",
+	}
 )
 
 type Account struct {
@@ -98,18 +104,20 @@ var timeStampInt = make([]int64, txCount)
 // // 用于在多shard上测试load unbalance
 
 // 并行发送交易函数
-func sendinBatch(sendingTx Account, wg *sync.WaitGroup, RandNum string, i int) {
+func sendinBatch(sendingTx Account, receivingTx Account, wg *sync.WaitGroup, RandNum string, i int) {
 
 	time.Sleep(15 * time.Millisecond)
 	// fmt.Println(sendingNum)
 
-	address, _ := hexutil.Decode(sendingTx.Address)
+	Sendaddress, _ := hexutil.Decode(sendingTx.Address)
+	Recaddress, _ := hexutil.Decode(receivingTx.Address)
 	prvkey, err := crypto.ToECDSA(common.FromHex(sendingTx.Key))
 
 	if err == nil {
 		context := make(map[string]string)
 		// addr := account.NewAddress(common.BytesToAddress(address[:20]), binary.BigEndian.Uint32(address[20:]))
-		addr := clt.QkcAddress{Recipient: common.BytesToAddress(address[:20]), FullShardKey: binary.BigEndian.Uint32(address[20:])}
+		addr := clt.QkcAddress{Recipient: common.BytesToAddress(Sendaddress[:20]), FullShardKey: binary.BigEndian.Uint32(Sendaddress[20:])}
+		recaddr := clt.QkcAddress{Recipient: common.BytesToAddress(Recaddress[:20]), FullShardKey: binary.BigEndian.Uint32(Recaddress[20:])}
 		context["address"] = addr.Recipient.Hex()
 
 		// // 假设有4个shard，不同的随机数代表account在不同的shard上发送交易
@@ -130,9 +138,9 @@ func sendinBatch(sendingTx Account, wg *sync.WaitGroup, RandNum string, i int) {
 		// 	context["toFullShardKey"] = "0x00000001"
 		// }
 
-		// 假设只有一个shard
+		// 假设有两个shard
 		context["fromFullShardKey"] = "0x00000001"
-		context["toFullShardKey"] = "0x00000001"
+		context["toFullShardKey"] = "0x00010001"
 
 		// context["fromFullShardKey"] = addr.FullShardKeyToHex()
 
@@ -143,10 +151,20 @@ func sendinBatch(sendingTx Account, wg *sync.WaitGroup, RandNum string, i int) {
 		// }
 
 		context["from"] = addr.Recipient.Hex()
-		context["to"] = addr.Recipient.Hex()
+		context["to"] = recaddr.Recipient.Hex()
 		context["amount"] = "0"
 		context["price"] = "100000000000"
 		// context["toFullShardKey"] = addr.FullShardKeyToHex()
+
+		// 如果是账户搬移操作，则让sharding node签名
+		if context["from"] == context["to"] {
+			fmt.Println("account migrate tx")
+			prvkey, err = crypto.ToECDSA(common.FromHex(ShardTx.Key))
+
+			ShardPubkey, _ := hexutil.Decode(ShardTx.Address)
+			fmt.Println("sharding node pubkey (common.Address):", common.BytesToAddress(ShardPubkey))
+		}
+
 		context["privateKey"] = common.Bytes2Hex(prvkey.D.Bytes())
 
 		timeUnix[i] = time.Now().Unix()
@@ -216,7 +234,7 @@ func main() {
 			var RandNum = record[i][0]
 
 			// go sendinBatch(json[i%accountBatch])
-			go sendinBatch(json[i], &wg, RandNum, i)
+			go sendinBatch(json[i], json[i], &wg, RandNum, i)
 
 			// time.Sleep(10 * time.Millisecond)
 
@@ -513,6 +531,9 @@ func sent(ctx map[string]string) string {
 	// 我改了
 	// 得到to shard 里交易的最终打包时间，以便于之后计算打包延迟
 	var txidhex = common.Bytes2Hex(txid)
+
+	fmt.Println("tx hash:", txidhex)
+
 	var txidtoshard = txidhex[0 : len(txidhex)-8]
 	txidtoshard += ctx["toFullShardKey"][2:len(ctx["toFullShardKey"])]
 	// fmt.Println(txidtoshard)
