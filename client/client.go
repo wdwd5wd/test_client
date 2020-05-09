@@ -248,8 +248,12 @@ func (c *Client) EstimateGas(params *CallMsg) (gas uint64, err error) {
 }
 
 func (c *Client) GetNonce(qkcAddr *QkcAddress) (nonce uint64, err error) {
+	fmt.Println("Getting account data")
+BreakPoint:
 	shrd, err := c.GetAccountData(qkcAddr, nil, true)
 	if err != nil {
+		fmt.Println("Retrying")
+		goto BreakPoint
 		return 0, err
 	}
 	return hexutil.DecodeUint64(shrd["transactionCount"].(string))
@@ -301,7 +305,7 @@ func (c *Client) CreateTransactionGetNonceFromShard(qkcFromAddr, qkcToAddr *QkcA
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("Migration tx nonce is:", nonce)
+	// fmt.Println("Migration tx nonce is:", nonce)
 
 	// 我改了
 	// networkId, err := c.NetworkID()

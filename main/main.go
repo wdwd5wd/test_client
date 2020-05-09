@@ -29,11 +29,17 @@ var (
 	client       = clt.NewClient("http://13.56.95.27:38391")
 	fullShardKey = uint32(0)
 
-	txCount        = 720000
-	CPUCount       = 4
-	MaxThreadCount = 50
-	ShardNum       = 4
+	txCount        = 4800000
+	CPUCount       = 96
+	MaxThreadCount = 400
+	ShardNum       = 8
 	SendingTPS     = ShardNum * 50
+
+	// EPOCH 从allocation node处得知的EPOCH轮数，不搬移时默认为0，搬移时默认为1
+	EPOCH    = 0
+	NewEPOCH = 0
+
+	DelayFile = "DelayNOMig8_6.csv"
 
 	// 负责给账户搬移签名的账户
 	ShardTx = Account{
@@ -75,10 +81,12 @@ func NewJson() *JsonStruct {
 // 得到交易打包进块的时间，如果是用shard node签名的话此处的account就是shard node
 func GetBlockTimeStamp(sendingTx Account, txCount int) {
 
-	for i := 0; i < txCount; i++ {
+	for i := 0; i < txCount; i = i + 100 {
 		_, err := crypto.ToECDSA(common.FromHex(sendingTx.Key))
 
 		if err == nil {
+			fmt.Println("Sample,", i/100)
+
 			var timeStampResultTemp []interface{}
 			var timeStampIntTemp []int64
 			for j := 0; j < ShardNum; j++ {
@@ -110,6 +118,7 @@ func GetBlockTimeStamp(sendingTx Account, txCount int) {
 
 			// timeStampInt[i], _ = strconv.ParseInt(timeStampResult[i].(string), 0, 64)
 		}
+
 	}
 
 }
@@ -232,7 +241,7 @@ func ReadAddLoc(fileName string) [][]string {
 }
 
 // GenesisTransfer 创世账户为其余普通账户分钱
-func GenesisTransfer(Genesis Account, FromAdd string, TxNonce int) {
+func GenesisTransfer(Genesis Account, FromAdd string, TxNonce int, RandNum string) {
 
 	// time.Sleep(15 * time.Millisecond)
 	// fmt.Println(sendingNum)
@@ -259,17 +268,61 @@ func GenesisTransfer(Genesis Account, FromAdd string, TxNonce int) {
 
 		context["privateKey"] = common.Bytes2Hex(prvkey.D.Bytes())
 
-		for index := 0; index < ShardNum; index++ {
-			RandNumHex := strconv.FormatInt(int64(index), 16)
+		RandNumInt, _ := strconv.ParseInt(RandNum, 10, 64)
+		RandNumHex := strconv.FormatInt(RandNumInt, 16)
+		context["fromFullShardKey"] = "0x" + RandNumHex + "0001"
+		context["toFullShardKey"] = "0x" + RandNumHex + "0001"
+
+		SendTx(context, TxNonce)
+		// SendMigTx(context)
+
+	} else {
+		fmt.Println(err)
+	}
+
+	// runtime.Gosched()
+	// quit <- 1
+
+	// // 消费完毕则调用 Done，减少需要等待的线程
+	// wg.Done()
+
+}
+
+// GenesisTransferForTop 创世账户为Top账户分钱
+func GenesisTransferForTop(Genesis Account, FromAdd string) {
+
+	// time.Sleep(15 * time.Millisecond)
+	// fmt.Println(sendingNum)
+
+	Sendaddress, _ := hexutil.Decode(Genesis.Address)
+	Recaddress, _ := hexutil.Decode(FromAdd)
+
+	// TODO: 所有交易都由node签名？能方便做实验
+	prvkey, err := crypto.ToECDSA(common.FromHex(Genesis.Key))
+
+	if err == nil {
+		context := make(map[string]string)
+		// addr := account.NewAddress(common.BytesToAddress(address[:20]), binary.BigEndian.Uint32(address[20:]))
+		addr := clt.QkcAddress{Recipient: common.BytesToAddress(Sendaddress[:20]), FullShardKey: binary.BigEndian.Uint32(Sendaddress[20:])}
+		recaddr := clt.QkcAddress{Recipient: common.BytesToAddress(Recaddress[:20]), FullShardKey: binary.BigEndian.Uint32(Recaddress[20:])}
+		context["address"] = addr.Recipient.Hex()
+
+		context["from"] = addr.Recipient.Hex()
+		context["to"] = recaddr.Recipient.Hex()
+		context["amount"] = "100000000000000000000"
+		// context["price"] = "100000000000"
+		context["price"] = "1"
+		// context["toFullShardKey"] = addr.FullShardKeyToHex()
+
+		context["privateKey"] = common.Bytes2Hex(prvkey.D.Bytes())
+
+		for i := 0; i < ShardNum; i++ {
+			RandNumHex := strconv.FormatInt(int64(i), 16)
 			context["fromFullShardKey"] = "0x" + RandNumHex + "0001"
 			context["toFullShardKey"] = "0x" + RandNumHex + "0001"
 
-			SendTx(context, TxNonce)
-			// context["txid"] = txid
-			// getTransaction(context)
-			// getReceipt(context)
-
-			// sent(context)
+			// SendTx(context, TxNonce)
+			SendMigTx(context)
 		}
 
 	} else {
@@ -323,7 +376,7 @@ func AccountMigration(sendingTx Account, receivingTx Account, RandNum string, Ra
 		context["to"] = recaddr.Recipient.Hex()
 		context["amount"] = "0"
 		// context["price"] = "100000000000"
-		context["price"] = "1000000"
+		context["price"] = "1000"
 		// context["toFullShardKey"] = addr.FullShardKeyToHex()
 
 		// 如果是账户搬移操作，则让sharding node签名
@@ -386,6 +439,32 @@ func CalculatePriceAll(FromAdd []string) []string {
 	}
 
 	return PriceString
+}
+
+// CalculateNonceGenesis 为创世账户分钱时所用，计算分钱时创世账户的nonce
+func CalculateNonceGenesis(FromAddLoc [][]string, EPOCH int, Genesis []Account) ([]int, []Account, []string) {
+	Nonce := make([]int, len(FromAddLoc))
+	CorrespondingSender := make([]Account, len(FromAddLoc))
+	OnWhichShard := make([]string, len(FromAddLoc))
+
+	NonceMap := make(map[int]int)
+
+	for i := 0; i < ShardNum; i++ {
+		if _, ok := NonceMap[i]; !ok {
+			NonceMap[i] = 0
+		}
+	}
+
+	for index, value := range FromAddLoc {
+		valueint, _ := strconv.Atoi(value[EPOCH+1])
+		Nonce[index] = NonceMap[valueint] / len(Genesis)
+		CorrespondingSender[index] = Genesis[NonceMap[valueint]%len(Genesis)]
+		OnWhichShard[index] = value[EPOCH+1]
+
+		NonceMap[valueint] = (NonceMap[valueint] + 1)
+	}
+
+	return Nonce, CorrespondingSender, OnWhichShard
 }
 
 // 以下是服务器接收相关
@@ -475,7 +554,7 @@ func OpenService(server net.Listener) {
 // 批量生成账户
 func GenerateAccounts() {
 
-	number := 20000
+	number := 7000000
 
 	account := []map[string]string{}
 
@@ -498,13 +577,18 @@ func GenerateAccounts() {
 				"key":     PrivKeyHex,
 			}
 
-			fmt.Println("Adding account: ", i)
+			if i%100000 == 0 {
+				fmt.Println("Adding account: ", i)
+			}
+
 			account = append(account, accounttemp)
 		} else {
 			fmt.Println(err)
 		}
 
 	}
+
+	fmt.Println(len(account))
 
 	// accounttest := map[string][]map[string]string{
 	// 	"nimabi": account,
@@ -515,7 +599,7 @@ func GenerateAccounts() {
 		fmt.Println("Marshal error:", err)
 	}
 
-	err = ioutil.WriteFile("loadtest.json", b, os.ModeAppend)
+	err = ioutil.WriteFile("AccForLarge70to79.json", b, os.ModeAppend)
 	if err != nil {
 		fmt.Println("Write error:", err)
 	}
@@ -523,10 +607,6 @@ func GenerateAccounts() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// EPOCH 从allocation node处得知的EPOCH轮数
-var EPOCH = 1
-var NewEPOCH = 1
 
 var FromAddLocMap = make(map[string]string)
 var ToAddLocMap = make(map[string]string)
@@ -540,6 +620,7 @@ func main() {
 
 	// 测试用
 	// TestMain()
+	// testDelay()
 
 	// 预先生成账户，只用一次
 	// GenerateAccounts()
@@ -557,7 +638,7 @@ func main() {
 
 	// 读取及解析自己生成的account json文件
 	GeneratedAccountJSON := make([]Account, 0)
-	NewJson().Load("./accounts.json", &GeneratedAccountJSON)
+	NewJson().Load("./AccForLarge70to79.json", &GeneratedAccountJSON)
 
 	fmt.Println("End reading generated account json file")
 
@@ -566,7 +647,7 @@ func main() {
 	var to_address []string
 
 	// 读取交易信息文件
-	fileName := "bq-results-20190905-154154-u51yqnfufcbn.csv"
+	fileName := "../../../../GraphAlgorithm/main/Txs30000000to35000000.csv"
 	fs, err := os.Open(fileName)
 	if err != nil {
 		log.Fatalf("can not open the file, err is %+v", err)
@@ -586,8 +667,8 @@ func main() {
 		// fmt.Println(row)
 
 		if i != 0 {
-			from_address = append(from_address, row[1])
-			to_address = append(to_address, row[2])
+			from_address = append(from_address, row[0])
+			to_address = append(to_address, row[1])
 		}
 
 		i++
@@ -595,8 +676,8 @@ func main() {
 	}
 
 	// 读取address location文件
-	FromAddLoc := ReadAddLoc("FromAddLoc_all_mig_Mar29.csv")
-	ToAddLoc := ReadAddLoc("ToAddLoc_all_mig_Mar29.csv")
+	FromAddLoc := ReadAddLoc("../../../../GraphAlgorithm/main/FromAddLocAllMig10min5bw8_6.csv")
+	ToAddLoc := ReadAddLoc("../../../../GraphAlgorithm/main/ToAddLocAllMig10min5bw8_6.csv")
 
 	for index, value := range FromAddLoc {
 		FromAddLocMap[value[0]] = value[EPOCH+1]
@@ -615,6 +696,17 @@ func main() {
 	NonceAll := CalculateNonceAll(from_address)
 	PriceAll := CalculatePriceAll(from_address)
 
+	// 读取top account地址
+	TopAcc := ReadAddLoc("../../../../GraphAlgorithm/main/TopAcc30000000to35000000.csv")
+	var TopAccMap = make(map[string]bool)
+
+	for _, value := range TopAcc {
+		TopAccMap[AccountMap[value[0]].Address] = true
+	}
+
+	// 计算创世账户分钱时的nonce
+	GenesisNonce, GenesisSender, WhichShard := CalculateNonceGenesis(FromAddLoc, EPOCH, json)
+
 	// 参数设置
 
 	runtime.GOMAXPROCS(CPUCount)
@@ -627,25 +719,25 @@ func main() {
 	// 初始化，为每个账户分一些钱
 	fmt.Println("创世账户开始分钱")
 
-	// for iter := 0; iter < len(FromAddLoc)/MaxThreadCount; iter++ {
+	// for iter := 0; iter < len(FromAddLoc); iter++ {
 
 	// // 设置阻塞线程
 	// var wg sync.WaitGroup
 	// // 设置需要多少个线程阻塞
-	// wg.Add(MaxThreadCount)
+	// wg.Add(1)
 
 	for i := 0; i < len(FromAddLoc); i++ {
 
-		fmt.Println(i)
+		// fmt.Println(i)
 
-		go GenesisTransfer(json[i/1000], AccountMap[FromAddLoc[i][0]].Address, i%1000)
+		go GenesisTransfer(GenesisSender[i], AccountMap[FromAddLoc[i][0]].Address, GenesisNonce[i], WhichShard[i])
 
 		// 限制每秒交易次数
 		TPSCount++
-		if TPSCount == SendingTPS/ShardNum {
+		if TPSCount == MaxThreadCount {
 			toc := time.Since(tic)
 			if toc < 1000*1000*1000 {
-				fmt.Println("sleeping")
+				fmt.Println("sleeping", i)
 				time.Sleep((1000*1000*1000 - toc) * time.Nanosecond)
 			}
 
@@ -659,7 +751,22 @@ func main() {
 	// wg.Wait()
 
 	// }
+
 	fmt.Println("创世账户分钱结束")
+
+	// 等待用户响应
+	fmt.Scanln()
+
+	// 再给top账户在其余shard分钱
+	for index, value := range FromAddLoc {
+		if TopAccMap[AccountMap[value[0]].Address] == true {
+			fmt.Println("Top Acc", index%10000, AccountMap[FromAddLoc[index][0]].Address)
+			GenesisTransferForTop(json[index%10000], AccountMap[FromAddLoc[index][0]].Address)
+			time.Sleep(1 * time.Second)
+		}
+	}
+
+	fmt.Println("Top账户也分钱结束")
 
 	// 等待用户响应
 	fmt.Scanln()
@@ -687,7 +794,9 @@ func main() {
 			for _, value := range FromAddLoc {
 				// 如果epoch变了，则该账户放置位置变化
 				if value[EPOCH+1] != value[NewEPOCH+1] {
-					go AccountMigration(AccountMap[value[0]], AccountMap[value[0]], value[EPOCH+1], value[NewEPOCH+1])
+					fmt.Println("Migrate account:", AccountMap[value[0]].Address)
+
+					AccountMigration(AccountMap[value[0]], AccountMap[value[0]], value[EPOCH+1], value[NewEPOCH+1])
 					FromAddLocMap[value[0]] = value[NewEPOCH+1]
 
 					// // 限制每秒交易次数
@@ -777,6 +886,7 @@ func main() {
 
 	// 等待用户响应以后再获取每个transaction打包进块的时间
 	fmt.Scanln()
+	// time.Sleep(2 * time.Hour)
 
 	fmt.Println("Start calculating block time stamp...")
 
@@ -790,7 +900,11 @@ func main() {
 	fmt.Println("Start calculating packing delay...")
 	var diff = int64(0)
 	var count = 0
-	for i := 0; i < txCount; i++ {
+	DelayToCSV := [][]string{}
+	for i := 0; i < txCount; i = i + 100 {
+
+		DelayRow := make([]string, 1)
+		copy(DelayRow, []string{strconv.Itoa(-1)})
 
 		_, err := crypto.ToECDSA(common.FromHex(ShardTx.Key))
 		for j := 0; j < ShardNum; j++ {
@@ -798,8 +912,11 @@ func main() {
 				diff = timeStampInt[i][j] - timeUnix[i] + diff
 				count++
 				// fmt.Println(i)
+				copy(DelayRow, []string{strconv.Itoa(int(timeStampInt[i][j] - timeUnix[i]))})
 			}
 		}
+
+		DelayToCSV = append(DelayToCSV, DelayRow)
 		// if err == nil && timeStampInt[i]-timeUnix[i] >= 0 {
 		// 	diff = timeStampInt[i] - timeUnix[i] + diff
 		// 	count++
@@ -809,6 +926,9 @@ func main() {
 	diff = diff / int64(count)
 	fmt.Println("Count:", count)
 	fmt.Println("Average delay:", diff)
+
+	// 将延迟写入CSV文件
+	WriteToCSV(DelayToCSV, DelayFile)
 
 }
 
@@ -964,9 +1084,13 @@ func SendTx(ctx map[string]string, nonce int) []string {
 	if err != nil {
 		fmt.Println(err.Error())
 	}
+
+ResendTx:
 	txid, err := client.SendTransaction(tx)
 	if err != nil {
 		fmt.Println("SendTransaction error: ", err.Error())
+		fmt.Println("Resending...")
+		goto ResendTx
 	}
 
 	txidtoshardSlice := []string{}
@@ -1054,16 +1178,20 @@ func SendMigTx(ctx map[string]string) string {
 	if err != nil {
 		fmt.Println(err.Error())
 	}
+
+ResendTx:
 	txid, err := client.SendTransaction(tx)
 	if err != nil {
 		fmt.Println("SendTransaction error: ", err.Error())
+		fmt.Println("Resending...")
+		goto ResendTx
 	}
 
 	// 我改了
 	// 得到to shard 里交易的最终打包时间，以便于之后计算打包延迟
 	var txidhex = common.Bytes2Hex(txid)
 
-	fmt.Println("tx hash:", txidhex)
+	// fmt.Println("tx hash:", txidhex)
 
 	var txidtoshard = txidhex[0 : len(txidhex)-8]
 	txidtoshard += ctx["toFullShardKey"][2:len(ctx["toFullShardKey"])]
@@ -1107,7 +1235,7 @@ func TestMain() {
 		for i := iter * MaxThreadCount; i < (iter+1)*MaxThreadCount; i++ {
 			fmt.Println(i)
 
-			go GenesisTransfer(json[i/1000], GeneratedAccountJSON[i].Address, i%1000)
+			// go GenesisTransfer(json[i/1000], GeneratedAccountJSON[i].Address, i%1000)
 
 			// 限制每秒交易次数
 			TPSCount++
@@ -1160,7 +1288,7 @@ func TestMain() {
 
 			for index := 0; index < 4; index++ {
 
-				go AccountMigration(GeneratedAccountJSON[index], GeneratedAccountJSON[index], "0", "2")
+				AccountMigration(GeneratedAccountJSON[index], GeneratedAccountJSON[index], "0", "2")
 
 				// // 限制每秒交易次数
 				// TPSCount++
@@ -1286,4 +1414,37 @@ func TestMain() {
 
 	fmt.Scanln()
 
+}
+
+func WriteToCSV(FileToCSV [][]string, fileName string) {
+	// 写入csv文件
+	f, err := os.Create(fileName) //创建文件
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	w := csv.NewWriter(f) //创建一个新的写入文件流
+	// WriteAll方法使用Write方法向w写入多条记录，并在最后调用Flush方法清空缓存。
+	w.WriteAll(FileToCSV)
+	w.Flush()
+}
+
+func testDelay() {
+	DelayToCSV := [][]string{}
+	for i := 0; i < 100; i++ {
+
+		DelayRow := make([]string, 1)
+		copy(DelayRow, []string{strconv.Itoa(-1)})
+
+		for j := 0; j < ShardNum; j++ {
+			if i+j == ShardNum {
+				// fmt.Println(i)
+				copy(DelayRow, []string{strconv.Itoa(int(164837))})
+			}
+		}
+
+		DelayToCSV = append(DelayToCSV, DelayRow)
+	}
+	fmt.Println(DelayToCSV)
 }
